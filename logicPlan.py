@@ -235,7 +235,7 @@ def pacmanSuccessorAxiomSingle(x: int, y: int, time: int, walls_grid: List[List[
         return None
     
     "*** BEGIN YOUR CODE HERE ***"
-    util.raiseNotDefined()
+    return PropSymbolExpr(pacman_str, x, y, time=now) % disjoin(possible_causes)
     "*** END YOUR CODE HERE ***"
 
 
@@ -306,7 +306,34 @@ def pacphysicsAxioms(t: int, all_coords: List[Tuple], non_outer_wall_coords: Lis
     pacphysics_sentences = []
 
     "*** BEGIN YOUR CODE HERE ***"
-    util.raiseNotDefined()
+    # If there is a wall in (x, y) --> Pacman can not be at (x, y)
+    nowall: List[Expr] = []
+    for (x, y) in all_coords:
+        wall_position = PropSymbolExpr(wall_str, x, y)
+        pacman_position = PropSymbolExpr(pacman_str, x, y, time=t)
+        nowall.append(wall_position >> ~pacman_position)
+    pacphysics_sentences.append(conjoin(nowall))
+
+    # Το Pacman βρίσκεται ακριβώς σε ένα από τα τετράγωνα στο χρονικό βήμα t.
+    possiblecoords: List[Expr] = []
+    for (x, y) in non_outer_wall_coords:
+        possiblecoords.append(PropSymbolExpr(pacman_str, x, y, time=t))
+    pacphysics_sentences.append(exactlyOne(possiblecoords))
+
+    # Ο Pacman κάνει ακριβώς μία ενέργεια στο χρονικό βήμα t.
+    actions: List[Expr] = []
+    for action in DIRECTIONS:
+        actions.append(PropSymbolExpr(action, time=t))
+    pacphysics_sentences.append(exactlyOne(actions))
+
+    # Αποτελέσματα κλήσης sensorModel(...), εκτός εάν Κανένα.
+    if sensorModel is not None:
+        pacphysics_sentences.append(sensorModel(t, non_outer_wall_coords))
+
+    # Αποτελέσματα της κλήσης διαδόχουAxioms(...), που περιγράφουν πώς το Pacman μπορεί να τελειώσει σε διάφορα
+    # τοποθεσίες σε αυτό το χρονικό βήμα. Εξετάστε τις ακραίες περιπτώσεις. Μην κληθει αν Κανένα.
+    if t != 0 and walls_grid is not None and successorAxioms is not None:
+        pacphysics_sentences.append(successorAxioms(t, walls_grid, non_outer_wall_coords))
     "*** END YOUR CODE HERE ***"
 
     return conjoin(pacphysics_sentences)
@@ -335,12 +362,33 @@ def checkLocationSatisfiability(x1_y1: Tuple[int, int], x0_y0: Tuple[int, int], 
     x0, y0 = x0_y0
     x1, y1 = x1_y1
 
-    # We know which coords are walls:
+    # Γνωρίζουμε ποιες συνθέσεις είναι τοίχοι:
     map_sent = [PropSymbolExpr(wall_str, x, y) for x, y in walls_list]
     KB.append(conjoin(map_sent))
 
     "*** BEGIN YOUR CODE HERE ***"
-    util.raiseNotDefined()
+    axioms0 = pacphysicsAxioms(0, all_coords, non_outer_wall_coords, walls_grid=walls_grid, sensorModel=None, successorAxioms=allLegalSuccessorAxioms)
+    axioms1 = pacphysicsAxioms(1, all_coords, non_outer_wall_coords, walls_grid=walls_grid, sensorModel=None, successorAxioms=allLegalSuccessorAxioms)
+    
+    current = PropSymbolExpr(pacman_str, x0, y0, time=0)
+    x1y1 = PropSymbolExpr(pacman_str, x1, y1, time=1)
+    act0 = PropSymbolExpr(action0, time=0)
+    act1 = PropSymbolExpr(action1, time=1)
+    
+    KB.append(axioms0)
+    KB.append(axioms1)
+    KB.append(current)
+    KB.append(act0)
+    KB.append(act1)
+
+    # Στο model1, ο Pacman βρίσκεται στο (x1, y1) τη στιγμή t = 1 δεδομένου x0_y0, action0, action1, αποδεικνύοντας ότι είναι πιθανό να βρίσκεται ο Pacman εκεί.
+    # Συγκεκριμένα, εάν το model1 είναι False, γνωρίζουμε ότι ο Pacman είναι εγγυημένο ότι ΔΕΝ θα είναι εκεί.
+    model1 = findModel(conjoin(KB) & x1y1)
+
+    # Στο model2, ο Pacman ΔΕΝ βρίσκεται στο (x1, y1) τη στιγμή t = 1 δεδομένου x0_y0, action0, action1, αποδεικνύοντας ότι είναι πιθανό ο Pacman να μην είναι εκεί.
+    # Συγκεκριμένα, εάν το model2 είναι False, γνωρίζουμε ότι η Pacman είναι εγγυημένη.
+    model2 = findModel(conjoin(KB) & ~x1y1)
+    return (model1, model2)
     "*** END YOUR CODE HERE ***"
 
 #______________________________________________________________________________
