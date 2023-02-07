@@ -408,14 +408,35 @@ def positionLogicPlan(problem) -> List:
     xg, yg = problem.goal
     
     # Get lists of possible locations (i.e. without walls) and possible actions
-    all_coords = list(itertools.product(range(width + 2), 
-            range(height + 2)))
+    all_coords = list(itertools.product(range(width + 2), range(height + 2)))
     non_wall_coords = [loc for loc in all_coords if loc not in walls_list]
     actions = [ 'North', 'South', 'East', 'West' ]
     KB = []
 
     "*** BEGIN YOUR CODE HERE ***"
-    util.raiseNotDefined()
+    initLoc = PropSymbolExpr(pacman_str, x0, y0, time=0)
+    KB.append(initLoc)
+    for k in range(50):
+        print("time = ", k)
+        posLoc: List[Expr] = []
+        for (x, y) in non_wall_coords:
+            posLoc.append(PropSymbolExpr(pacman_str, x, y, time=k))
+        KB.append(exactlyOne(posLoc))
+        goal = PropSymbolExpr(pacman_str, xg, yg, time=k)
+        acts: List[Expr] = []
+        for act in actions:
+            acts.append(PropSymbolExpr(act, time=k))
+        KB.append(exactlyOne(acts))
+
+        if k > 0:
+            for (x, y) in non_wall_coords:
+                KB.append(pacmanSuccessorAxiomSingle(x, y, time=k, walls_grid=walls_grid))
+
+        model = findModel(conjoin(KB) & goal)
+        if model:
+            temp = extractActionSequence(model, actions)
+            return temp
+
     "*** END YOUR CODE HERE ***"
 
 #______________________________________________________________________________
