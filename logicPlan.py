@@ -10,7 +10,7 @@
 # (denero@cs.berkeley.edu) and Dan Klein (klein@cs.berkeley.edu).
 # Student side autograding was added by Brad Miller, Nick Hay, and
 # Pieter Abbeel (pabbeel@cs.berkeley.edu).
-
+import random
 
 """
 In logicPlan.py, you will implement logic planning methods which are called by
@@ -659,11 +659,30 @@ def slam(problem, agent) -> Generator:
     KB.append(conjoin(outer_wall_sent))
 
     "*** BEGIN YOUR CODE HERE ***"
-    util.raiseNotDefined()
-
     for t in range(agent.num_timesteps):
-        "*** END YOUR CODE HERE ***"
-        yield (known_map, possible_locations)
+        observations = problem.getObservations(t)
+        pac_man_location_sentences = []
+        for x, y in non_outer_wall_coords:
+            if (x, y) in observations:
+                if observations[(x, y)]:
+                    pac_man_location_sentences.append(PropSymbolExpr(pacman_str, x, y))
+                else:
+                    pac_man_location_sentences.append(~PropSymbolExpr(pacman_str, x, y))
+        KB.append(conjoin(pac_man_location_sentences))
+        possible_locations = []
+        for x, y in non_outer_wall_coords:
+            pac_man_location = PropSymbolExpr(pacman_str, x, y)
+            pac_man_not_location = ~PropSymbolExpr(pacman_str, x, y)
+            if pl_resolution(KB, pac_man_location) or pl_resolution(KB, pac_man_not_location):
+                possible_locations.append((x, y))
+        if (pac_x_0, pac_y_0) in possible_locations:
+            pac_x, pac_y = pac_x_0, pac_y_0
+        else:
+            pac_x, pac_y = random.choice(possible_locations)
+        KB.append(PropSymbolExpr(pacman_str, pac_x, pac_y))
+        known_map[pac_x][pac_y] = 0
+    "*** END YOUR CODE HERE ***"
+    yield (known_map, possible_locations)
 
 
 # Abbreviations
