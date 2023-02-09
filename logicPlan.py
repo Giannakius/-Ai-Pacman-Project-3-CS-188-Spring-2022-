@@ -306,34 +306,34 @@ def pacphysicsAxioms(t: int, all_coords: List[Tuple], non_outer_wall_coords: Lis
     pacphysics_sentences = []
 
     "*** BEGIN YOUR CODE HERE ***"
-    # If there is a wall in (x, y) --> Pacman can not be at (x, y)
-    nowall: List[Expr] = []
+    no_wall_conditions: List[Expr] = []
     for (x, y) in all_coords:
-        wall_position = PropSymbolExpr(wall_str, x, y)
-        pacman_position = PropSymbolExpr(pacman_str, x, y, time=t)
-        nowall.append(wall_position >> ~pacman_position)
-    pacphysics_sentences.append(conjoin(nowall))
+        wall_location = PropSymbolExpr(wall_str, x, y)
+        pacman_location = PropSymbolExpr(pacman_str, x, y, time=t)
+        no_wall_conditions.append(wall_location >> ~pacman_location)
+    pacphysics_sentences.append(conjoin(no_wall_conditions))
 
     # Το Pacman βρίσκεται ακριβώς σε ένα από τα τετράγωνα στο χρονικό βήμα t.
-    possiblecoords: List[Expr] = []
+    possible_coordinates: List[Expr] = []
     for (x, y) in non_outer_wall_coords:
-        possiblecoords.append(PropSymbolExpr(pacman_str, x, y, time=t))
-    pacphysics_sentences.append(exactlyOne(possiblecoords))
+        possible_coordinates.append(PropSymbolExpr(pacman_str, x, y, time=t))
+    pacphysics_sentences.append(exactlyOne(possible_coordinates))
 
-    # Ο Pacman κάνει ακριβώς μία ενέργεια στο χρονικό βήμα t.
-    actions: List[Expr] = []
-    for action in DIRECTIONS:
-        actions.append(PropSymbolExpr(action, time=t))
-    pacphysics_sentences.append(exactlyOne(actions))
+    # Το Pacman κάνει ακριβώς μία ενέργεια στο χρονικό βήμα t.
+    actions_available: List[Expr] = []
+    for move in DIRECTIONS:
+        actions_available.append(PropSymbolExpr(move, time=t))
+    pacphysics_sentences.append(exactlyOne(actions_available))
 
-    # Αποτελέσματα κλήσης sensorModel(...), εκτός εάν Κανένα.
+    # Αποτελέσματα από την κλήση του sensorModel(...), εκτός αν κανένα.
     if sensorModel is not None:
         pacphysics_sentences.append(sensorModel(t, non_outer_wall_coords))
 
-    # Αποτελέσματα της κλήσης διαδόχουAxioms(...), που περιγράφουν πώς το Pacman μπορεί να τελειώσει σε διάφορα
-    # τοποθεσίες σε αυτό το χρονικό βήμα. Εξετάστε τις ακραίες περιπτώσεις. Μην κληθει αν Κανένα.
+    # Αποτελέσματα από την κλήση του successorAxioms(...), που περιγράφουν πώς ο Pacman μπορεί να μετακινηθεί σε διάφορες θέσεις στο χρονικό βήμα. Εξετάστε τις ακραίες περιπτώσεις. Δεν κληθεί αν κανένα.
     if t != 0 and walls_grid is not None and successorAxioms is not None:
         pacphysics_sentences.append(successorAxioms(t, walls_grid, non_outer_wall_coords))
+
+
     "*** END YOUR CODE HERE ***"
 
     return conjoin(pacphysics_sentences)
@@ -414,28 +414,30 @@ def positionLogicPlan(problem) -> List:
     KB = []
 
     "*** BEGIN YOUR CODE HERE ***"
-    initLoc = PropSymbolExpr(pacman_str, x0, y0, time=0)
-    KB.append(initLoc)
-    for k in range(50):
-        print("time = ", k)
-        posLoc: List[Expr] = []
+    start_loc = PropSymbolExpr(pacman_str, x0, y0, time=0)
+    KB.append(start_loc)
+
+    for tick in range(50):
+        print("Current time: ", tick)
+        possible_locs = []
         for (x, y) in non_wall_coords:
-            posLoc.append(PropSymbolExpr(pacman_str, x, y, time=k))
-        KB.append(exactlyOne(posLoc))
-        goal = PropSymbolExpr(pacman_str, xg, yg, time=k)
-        acts: List[Expr] = []
+            possible_locs.append(PropSymbolExpr(pacman_str, x, y, time=tick))
+        KB.append(exactlyOne(possible_locs))
+        target = PropSymbolExpr(pacman_str, xg, yg, time=tick)
+        possible_actions = []
         for act in actions:
-            acts.append(PropSymbolExpr(act, time=k))
-        KB.append(exactlyOne(acts))
+            possible_actions.append(PropSymbolExpr(act, time=tick))
+        KB.append(exactlyOne(possible_actions))
 
-        if k > 0:
+        if tick > 0:
             for (x, y) in non_wall_coords:
-                KB.append(pacmanSuccessorAxiomSingle(x, y, time=k, walls_grid=walls_grid))
+                KB.append(pacmanSuccessorAxiomSingle(x, y, time=tick, walls_grid=walls_grid))
 
-        model = findModel(conjoin(KB) & goal)
-        if model:
-            temp = extractActionSequence(model, actions)
-            return temp
+        result = findModel(conjoin(KB) & target)
+        if result:
+            action_sequence = extractActionSequence(result, actions)
+            return action_sequence
+
 
     "*** END YOUR CODE HERE ***"
 
@@ -465,41 +467,53 @@ def foodLogicPlan(problem) -> List:
     KB = []
 
     "*** BEGIN YOUR CODE HERE ***"
-    initLoc = PropSymbolExpr(pacman_str, x0, y0, time=0)
-    KB.append(initLoc)
+    KB = []
+    initPos = PropSymbolExpr(pacman_str, x0, y0, time=0)
+    KB.append(initPos)
+
+    # Add the initial food positions
     for (x, y) in food:
         KB.append(PropSymbolExpr(food_str, x, y, time=0))
+
     for t in range(50):
-        print("time = ", t)
-        posLoc: List[Expr] = []
+        print("Time step:", t)
+        posLoc = []
+        # Enforce exactly one position for Pacman at each time step
         for (x, y) in non_wall_coords:
             posLoc.append(PropSymbolExpr(pacman_str, x, y, time=t))
         KB.append(exactlyOne(posLoc))
 
-        acts: List[Expr] = []
+        # Enforce exactly one action at each time step
+        acts = []
         for act in actions:
             acts.append(PropSymbolExpr(act, time=t))
         KB.append(exactlyOne(acts))
 
+        # Keep track of food positions
         for (x, y) in food:
-            foodpos = PropSymbolExpr(food_str, x, y, time=t)
-            pacpos = PropSymbolExpr(pacman_str, x, y, time=t)
-            foodpos1 = PropSymbolExpr(food_str, x, y, time=t + 1)
-            KB.append((foodpos & pacpos) >> ~foodpos1)
-            KB.append(~pacpos >> (foodpos1 % foodpos))
+            food_pos = PropSymbolExpr(food_str, x, y, time=t)
+            pac_pos = PropSymbolExpr(pacman_str, x, y, time=t)
+            food_pos_1 = PropSymbolExpr(food_str, x, y, time=t + 1)
+            KB.append((food_pos & pac_pos) >> ~food_pos_1)
+            KB.append(~pac_pos >> (food_pos_1 % food_pos))
+
+        # Keep track of Pacman's movement
         if t > 0:
             for (x, y) in non_wall_coords:
                 KB.append(pacmanSuccessorAxiomSingle(x, y, time=t, walls_grid=walls))
 
-
-        foodgoal: List[Expr] = []
+        # Define the goal as eating all the food
+        food_goals = []
         for (x, y) in food:
-            foodgoal.append(~PropSymbolExpr(food_str, x, y, time=t))
-        goal = conjoin(foodgoal)
+            food_goals.append(~PropSymbolExpr(food_str, x, y, time=t))
+        goal = conjoin(food_goals)
+
+        # Find a model that satisfies the KB and the goal
         model = findModel(conjoin(KB) & goal)
         if model:
             plan = extractActionSequence(model, actions)
             return plan
+
     "*** END YOUR CODE HERE ***"
 
 #______________________________________________________________________________
@@ -547,6 +561,8 @@ def localization(problem, agent) -> Generator:
                     possible_locations.append((x,y))
             #maybe nice to have a debug statement here
         agent.moveToNextState(agent.actions[t])
+        
+        "* END YOUR CODE HERE *"
         yield possible_locations
 
 #______________________________________________________________________________
@@ -575,42 +591,45 @@ def mapping(problem, agent) -> Generator:
     KB.append(conjoin(outer_wall_sent))
 
     "*** BEGIN YOUR CODE HERE ***"
-    # Get initial location
-    initpos = PropSymbolExpr(pacman_str, pac_x_0, pac_y_0, time=0)
-    KB.append(initpos)
-    # Also add whether there is a wall at that location.
-    wallatstart = PropSymbolExpr(wall_str, pac_x_0, pac_y_0)
-    KB.append(~wallatstart)
+    # Get the starting position of Pac-Man
+    init_location = PropSymbolExpr(pacman_str, pac_x_0, pac_y_0, time=0)
+    KB.append(init_location)
 
+    # Add information about the presence of a wall at the starting location
+    wall_at_start = PropSymbolExpr(wall_str, pac_x_0, pac_y_0)
+    KB.append(~wall_at_start)
+
+    # Loop through all the timesteps
     for t in range(agent.num_timesteps):
-        # Add to KB: pacphysics_axioms(...), which you wrote in q3.
-        # Use sensorAxioms and allLegalSuccessorAxioms for localization and mapping
+        # Add the pacphysics axioms to the knowledge base
         KB.append(pacphysicsAxioms(t, all_coords, non_outer_wall_coords, walls_grid=known_map,
-                                   sensorModel=sensorAxioms, successorAxioms=allLegalSuccessorAxioms))
+                                sensorModel=sensorAxioms, successorAxioms=allLegalSuccessorAxioms))
 
-        # Add to KB: Pacman takes action prescribed by agent.actions[t]
+        # Add the action taken by the agent at this timestep to the knowledge base
         KB.append(PropSymbolExpr(agent.actions[t], time=t))
 
-        # Get the percepts by calling agent.getPercepts() and pass the percepts to fourBitPerceptRules(...)
-        # for localization and mapping. Add the resulting percept rules to KB.
+        # Get the percepts and add the resulting rules to the knowledge base
         percepts = agent.getPercepts()
-        perceptsrules = fourBitPerceptRules(t, percepts)
-        KB.append(perceptsrules)
+        percepts_rules = fourBitPerceptRules(t, percepts)
+        KB.append(percepts_rules)
 
-        # Can we prove whether a wall is at (x, y)? Can we prove whether a wall is not at (x, y)? Use entails and the KB.
+        # Check if a wall is present or absent at each non-outer-wall coordinate
         for (x, y) in non_outer_wall_coords:
-            wallhere = PropSymbolExpr(wall_str, x, y)
-            # Add to KB and update known_map: (x, y) locations where there is provably a wall.
-            if entails(conjoin(KB), wallhere):
-                KB.append(wallhere)
+            wall_here = PropSymbolExpr(wall_str, x, y)
+
+            # If a wall is present, add it to the knowledge base and update the known map
+            if entails(conjoin(KB), wall_here):
+                KB.append(wall_here)
                 known_map[x][y] = 1
-            # Add to KB and update known_map: (x, y) locations where there is provably not a wall.
-            if entails(conjoin(KB), ~wallhere):
-                KB.append(~wallhere)
+
+            # If a wall is not present, add the negation to the knowledge base and update the known map
+            if entails(conjoin(KB), ~wall_here):
+                KB.append(~wall_here)
                 known_map[x][y] = 0
 
-        # Call agent.moveToNextState(action_t) on the current agent action at timestep t.
+        # Move the agent to the next state based on the current action
         agent.moveToNextState(agent.actions[t])
+
         "*** END YOUR CODE HERE ***"
         yield known_map
 
