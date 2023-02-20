@@ -1,6 +1,6 @@
 # logicPlan.py
 # ------------
-# Licensing Information:  You are free to use or extend these projects for
+# Licensing Information:  You are free to use or extend these projects forr
 # educational purposes provided that (1) you do not distribute or publish
 # solutions, (2) you retain this notice, and (3) you provide clear
 # attribution to UC Berkeley, including a link to http://ai.berkeley.edu.
@@ -659,30 +659,45 @@ def slam(problem, agent) -> Generator:
     KB.append(conjoin(outer_wall_sent))
 
     "*** BEGIN YOUR CODE HERE ***"
+    # Initialize the knowledge base and known map
+    KB.append(PropSymbolExpr(pacman_str, pac_x_0, pac_y_0, time=0))
+    KB.append(~PropSymbolExpr(wall_str, pac_x_0, pac_y_0))
+    known_map[pac_x_0][pac_y_0] = 0
+
+    # Run through the timesteps
     for t in range(agent.num_timesteps):
-        observations = problem.getObservations(t)
-        pac_man_location_sentences = []
+        # Add physics axioms and action to the knowledge base
+        KB.append(pacphysicsAxioms(t, all_coords, non_outer_wall_coords, known_map, SLAMSensorAxioms, SLAMSuccessorAxioms))
+        KB.append(PropSymbolExpr(agent.actions[t], time=t))
+        KB.append(numAdjWallsPerceptRules(t, agent.getPercepts()))
+
+        # Update the known map with inferred wall locations
         for x, y in non_outer_wall_coords:
-            if (x, y) in observations:
-                if observations[(x, y)]:
-                    pac_man_location_sentences.append(PropSymbolExpr(pacman_str, x, y))
-                else:
-                    pac_man_location_sentences.append(~PropSymbolExpr(pacman_str, x, y))
-        KB.append(conjoin(pac_man_location_sentences))
+            if known_map[x][y] != -1:
+                continue
+            if entails(conjoin(KB), PropSymbolExpr(wall_str, x, y)):
+                known_map[x][y] = 1
+                KB.append(PropSymbolExpr(wall_str, x, y))
+            elif entails(conjoin(KB), ~PropSymbolExpr(wall_str, x, y)):
+                known_map[x][y] = 0
+                KB.append(~PropSymbolExpr(wall_str, x, y))
+
+        # Infer the possible locations of Pac-Man at this timestep
         possible_locations = []
         for x, y in non_outer_wall_coords:
-            pac_man_location = PropSymbolExpr(pacman_str, x, y)
-            pac_man_not_location = ~PropSymbolExpr(pacman_str, x, y)
-            if pl_resolution(KB, pac_man_location) or pl_resolution(KB, pac_man_not_location):
+            if findModel(conjoin(KB) & PropSymbolExpr(pacman_str, x, y, time=t)):
                 possible_locations.append((x, y))
-        if (pac_x_0, pac_y_0) in possible_locations:
-            pac_x, pac_y = pac_x_0, pac_y_0
-        else:
-            pac_x, pac_y = random.choice(possible_locations)
-        KB.append(PropSymbolExpr(pacman_str, pac_x, pac_y))
-        known_map[pac_x][pac_y] = 0
-    "*** END YOUR CODE HERE ***"
-    yield (known_map, possible_locations)
+            if entails(conjoin(KB), PropSymbolExpr(pacman_str, x, y, time=t)):
+                KB.append(PropSymbolExpr(pacman_str, x, y, time=t))
+            elif entails(conjoin(KB), ~PropSymbolExpr(pacman_str, x, y, time=t)):
+                KB.append(~PropSymbolExpr(pacman_str, x, y, time=t))
+
+        # Move Pac-Man to the next state and yield the updated known map and possible locations
+        agent.moveToNextState(agent.actions[t])
+        yield (known_map, possible_locations)
+
+
+
 
 
 # Abbreviations
